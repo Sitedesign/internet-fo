@@ -1,0 +1,78 @@
+#!/bin/bash
+#
+# Route switching failover script
+#
+# This script is for those cases where bonding is not an option,
+# where the link on the interface doesn't goes down on a failure.
+#
+# csanyi.krisztian@sitedesign.hu	Fri Mar  6 22:35:05 CET 2015
+
+PROD=1
+CONFDIR=/etc/internet-fo
+CONF=$CONFDIR/internet-fo.conf
+CS=/usr/local/bin/internet-fo-check
+PIDFILE=/var/run/internet-fo.pid
+PROG=`basename $0`
+LOGGER="logger -t $PROG -p local0.info --"
+
+# test that PID file exists
+if [ -f $PIDFILE ]; then
+	$LOGGER "PID file present: exiting..."
+	exit 1
+fi
+
+# create PID file
+touch $PIDFILE 
+
+if [ ! -f $CONF ]; then
+	echo "Config file not exists."
+	exit 1
+else
+	source $CONF
+fi
+
+if [ ${#routes[*]} -eq 0 ]; then
+	echo "Routes array is empty."
+	exit 2
+fi
+
+# get current default route and interface
+DEFR=`ip -4 route list 0/0 | cut -f3 -d" "`
+DEF_INT=`ip -4 route list 0/0 | cut -f5 -d" "`
+
+for item in "${routes[@]}"; do
+	p=(${item})
+
+	# run check script
+	$CS ${p[1]} ${p[2]}
+	r=$?
+
+	if [ $r -eq 0 ]; then
+		$LOGGER "${p[0]} route tested: ok"
+		if [ "$DEFR" = "${p[2]}" ]; then
+			break;
+		else
+			$LOGGER "Switching to route: $DEFR ($DEF_INT) -> ${p[2]} (${p[1]}) [${p[0]}]"
+
+			if [ $PROD -eq 1 ]; then
+				# remove 0/0 route
+				route del default gw $DEFR
+
+				# set route for backup
+				route add default gw ${p[2]}
+
+				# set DNS for new backup
+				cp $CONFDIR/resolv.conf.${p[0]} /etc/resolv.conf
+				
+			fi
+
+			break;
+		fi
+		break;
+	else
+		$LOGGER "${p[0]} route tested: failed"
+	fi
+done
+
+# remove PID file
+rm -f $PIDFILE
