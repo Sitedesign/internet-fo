@@ -1,0 +1,28 @@
+#!/bin/bash
+
+IP="8.8.8.8"
+
+if [ $# -ne 2 ]; then
+	echo "Usage: `basename $0` interface_name next_hop"
+	exit 0
+fi
+
+# set the route for the specific IP
+route add -host $IP gw $2 dev $1
+
+for i in 1 2 3; do
+	ping -c 1 $IP >/dev/null
+	declare T${i}=$?
+	sleep 1
+done
+
+r="$T1 $T2 $T3"
+
+# remove all routes for specific IP
+route del -host $IP gw $2 dev $1
+
+if [ "$r" = "0 0 0" ]; then
+	exit 0;
+else
+	exit 1;
+fi
