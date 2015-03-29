@@ -22,7 +22,7 @@ if [ -f $PIDFILE ]; then
 fi
 
 # create PID file
-touch $PIDFILE 
+echo $$ > $PIDFILE 
 
 if [ ! -f $CONF ]; then
 	echo "Config file not exists."
